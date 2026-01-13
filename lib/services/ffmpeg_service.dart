@@ -267,16 +267,16 @@ class FFmpegService {
       case BackgroundType.blur:
         // Blurred background with main video on top
         filters.add(
-            '[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease[main]');
+            '[0:v]scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease[main]');
         filters.add(
-            '[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${targetHeight},boxblur=20:5[bg]');
+            '[0:v]scale=$targetWidth:$targetHeight:force_original_aspect_ratio=increase,crop=$targetWidth:$targetHeight,boxblur=20:5[bg]');
         filters.add('[bg][main]overlay=(W-w)/2:(H-h)/2[vout]');
         break;
 
       case BackgroundType.blackBars:
         // Black background with letterbox/pillarbox
         filters.add(
-            '[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black[vout]');
+            '[0:v]scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease,pad=$targetWidth:$targetHeight:(ow-iw)/2:(oh-ih)/2:black[vout]');
         break;
 
       case BackgroundType.solidColor:
@@ -284,7 +284,7 @@ class FFmpegService {
         final color = clip.settings.backgroundColor ?? 0xFF000000;
         final colorHex = (color & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
         filters.add(
-            '[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:0x$colorHex[vout]');
+            '[0:v]scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease,pad=$targetWidth:$targetHeight:(ow-iw)/2:(oh-ih)/2:0x$colorHex[vout]');
         break;
     }
 

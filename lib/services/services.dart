@@ -1,4 +1,5 @@
 /// Barrel file for all services
+library;
 export 'ffmpeg_service.dart';
 export 'file_picker_service.dart';
 export 'storage_service.dart';

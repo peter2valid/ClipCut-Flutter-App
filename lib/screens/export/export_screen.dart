@@ -7,7 +7,6 @@ import '../../core/constants/app_typography.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../../services/services.dart';
-import '../../services/media_scanner_service.dart';
 import '../../widgets/widgets.dart';
 import 'widgets/resolution_picker.dart';
 import 'widgets/export_progress.dart';

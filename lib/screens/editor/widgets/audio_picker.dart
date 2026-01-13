@@ -179,7 +179,7 @@ class AudioPicker extends StatelessWidget {
                   Switch(
                     value: muteOriginal,
                     onChanged: onMuteOriginalChanged,
-                    activeColor: AppColors.accent,
+                    activeThumbColor: AppColors.accent,
                   ),
                 ],
               ),
