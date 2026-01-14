@@ -1,55 +1,68 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import '../services/services.dart';
+import '../core/utils/file_utils.dart';
 import 'project_provider.dart';
 
 /// State for export operations
+/// Updated for segment-based export (single FFmpeg call for all clips)
 class ExportState {
   final bool isExporting;
-  final int currentClipIndex;
   final int totalClips;
-  final double currentClipProgress;
+  final double overallProgress; // 0.0 to 1.0 for entire export
   final List<String> exportedPaths;
   final String? error;
+  final DateTime? startTime; // When export started
 
   const ExportState({
     this.isExporting = false,
-    this.currentClipIndex = 0,
     this.totalClips = 0,
-    this.currentClipProgress = 0.0,
+    this.overallProgress = 0.0,
     this.exportedPaths = const [],
     this.error,
+    this.startTime,
   });
 
-  /// Overall progress (0.0 to 1.0)
-  double get overallProgress {
-    if (totalClips == 0) return 0.0;
-    final completed = (currentClipIndex - 1).clamp(0, totalClips);
-    final current = currentClipProgress / totalClips;
-    return (completed / totalClips) + current;
+  /// Elapsed time since export started
+  Duration get elapsedTime {
+    if (startTime == null) return Duration.zero;
+    return DateTime.now().difference(startTime!);
   }
 
-  /// Progress text
+  /// Formatted elapsed time (MM:SS)
+  String get formattedTime {
+    final duration = elapsedTime;
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// Progress text for UI display with elapsed time
   String get progressText {
     if (!isExporting) return '';
-    return 'Exporting clip $currentClipIndex of $totalClips';
+    return 'Exporting $totalClips clips ($formattedTime)';
   }
+
+  /// Progress percentage (0-100)
+  int get progressPercent => (overallProgress * 100).round();
 
   ExportState copyWith({
     bool? isExporting,
-    int? currentClipIndex,
     int? totalClips,
-    double? currentClipProgress,
+    double? overallProgress,
     List<String>? exportedPaths,
     String? error,
+    DateTime? startTime,
+    bool clearStartTime = false,
   }) {
     return ExportState(
       isExporting: isExporting ?? this.isExporting,
-      currentClipIndex: currentClipIndex ?? this.currentClipIndex,
       totalClips: totalClips ?? this.totalClips,
-      currentClipProgress: currentClipProgress ?? this.currentClipProgress,
+      overallProgress: overallProgress ?? this.overallProgress,
       exportedPaths: exportedPaths ?? this.exportedPaths,
       error: error,
+      startTime: clearStartTime ? null : (startTime ?? this.startTime),
     );
   }
 }
@@ -70,9 +83,8 @@ class ExportNotifier extends StateNotifier<ExportState> {
 
     state = state.copyWith(
       isExporting: true,
-      currentClipIndex: 1,
       totalClips: 1,
-      currentClipProgress: 0.0,
+      overallProgress: 0.0,
       exportedPaths: [],
       error: null,
     );
@@ -86,11 +98,14 @@ class ExportNotifier extends StateNotifier<ExportState> {
         settings: settings,
         outputDir: outputDir,
         onProgress: (progress) {
-          state = state.copyWith(currentClipProgress: progress);
+          state = state.copyWith(overallProgress: progress);
         },
       );
 
       if (path != null) {
+        // Trigger media scanner so file appears in Gallery immediately
+        await MediaScannerService.scanFile(path);
+
         // Update clip with exported path
         final updatedClip = clip.markExported(path);
         _ref.read(projectProvider.notifier).updateClip(updatedClip);
@@ -117,64 +132,69 @@ class ExportNotifier extends StateNotifier<ExportState> {
     }
   }
 
-  /// Export all clips (or selected clips)
+  /// ⚡ EXPORT via -c copy using snapped timestamps
   Future<List<String>> exportAllClips({
     required ExportSettings settings,
     List<VideoClip>? clipsToExport,
   }) async {
     final project = _ref.read(projectProvider).project;
     if (project == null) return [];
-
     final clips = clipsToExport ?? project.clips;
+    if (clips.isEmpty) return [];
 
     state = state.copyWith(
       isExporting: true,
-      currentClipIndex: 0,
       totalClips: clips.length,
-      currentClipProgress: 0.0,
+      overallProgress: 0.0,
       exportedPaths: [],
       error: null,
+      startTime: DateTime.now(),
     );
 
     try {
-      final outputDir = await FFmpegService.getExportDirectory();
-      final exportedPaths = <String>[];
+      final dir = await FFmpegService.getExportDirectory();
+      await Directory(dir).create(recursive: true);
+
+      final out = <String>[];
 
       for (int i = 0; i < clips.length; i++) {
-        state = state.copyWith(
-          currentClipIndex: i + 1,
-          currentClipProgress: 0.0,
-        );
+        final c = clips[i];
+        final snapStart = await FFmpegService.snapToKeyframe(
+            project.sourceVideoPath, Duration(milliseconds: c.startTimeMs));
+        final snapEnd = await FFmpegService.snapToKeyframe(
+            project.sourceVideoPath, Duration(milliseconds: c.endTimeMs));
+        final path = '$dir/clip_${i.toString().padLeft(3, '0')}.mp4';
 
-        final path = await FFmpegService.exportClip(
+        final ok = await FFmpegService.exportFastClip(
           inputPath: project.sourceVideoPath,
-          clip: clips[i],
-          settings: settings,
-          outputDir: outputDir,
-          onProgress: (progress) {
-            state = state.copyWith(currentClipProgress: progress);
-          },
+          startTime: snapStart,
+          endTime: snapEnd,
+          outputPath: path,
         );
 
-        if (path != null) {
-          exportedPaths.add(path);
-
-          // Update clip with exported path
-          final updatedClip = clips[i].markExported(path);
-          _ref.read(projectProvider.notifier).updateClip(updatedClip);
+        if (ok) {
+          out.add(path);
+          await MediaScannerService.scanFile(path);
         }
+
+        state = state.copyWith(overallProgress: (i + 1) / clips.length);
       }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+      await MediaScannerService.scanFiles(out);
 
       state = state.copyWith(
         isExporting: false,
-        exportedPaths: exportedPaths,
+        exportedPaths: out,
+        overallProgress: 1.0,
+        clearStartTime: true,
       );
-
-      return exportedPaths;
+      return out;
     } catch (e) {
       state = state.copyWith(
         isExporting: false,
         error: e.toString(),
+        clearStartTime: true,
       );
       return [];
     }

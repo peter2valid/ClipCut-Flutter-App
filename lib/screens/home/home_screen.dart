@@ -36,15 +36,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _importVideo() async {
-    // Check permissions
-    final hasPermission = await PermissionService.hasStoragePermission();
-    if (!hasPermission) {
-      final granted = await PermissionService.requestStoragePermission();
-      if (!granted) {
-        if (mounted) {
+    setState(() => _isImporting = true);
+
+    try {
+      final videoPath = await FilePickerService.pickVideo();
+
+      // If videoPath is null, user either cancelled or denied permissions
+      if (videoPath == null) {
+        // Check if it was a permission denial
+        final hasPermission = await PermissionService.hasMediaPermission();
+        if (!hasPermission && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Storage permission is required to import videos'),
+            SnackBar(
+              content:
+                  const Text('Storage permission is required to import videos'),
               action: SnackBarAction(
                 label: 'SETTINGS',
                 onPressed: PermissionService.openSettings,
@@ -54,14 +59,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
         return;
       }
-    }
 
-    setState(() => _isImporting = true);
-
-    try {
-      final videoPath = await FilePickerService.pickVideo();
-
-      if (videoPath != null && mounted) {
+      if (mounted) {
         // Show duration selection dialog
         final duration = await _showDurationDialog();
 

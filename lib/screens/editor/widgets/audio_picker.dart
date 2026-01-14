@@ -194,20 +194,38 @@ class AudioPicker extends StatelessWidget {
     try {
       final audioPath = await FilePickerService.pickAudio();
 
-      if (audioPath != null) {
-        // Validate file exists
-        final file = File(audioPath);
-        if (await file.exists()) {
-          onAudioChanged(audioPath);
-        } else {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Audio file not found'),
-                backgroundColor: AppColors.error,
+      // If audioPath is null, check if it was a permission denial
+      if (audioPath == null) {
+        final hasPermission = await PermissionService.hasMediaPermission();
+        if (!hasPermission && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                  'Storage permission is required to access audio files'),
+              backgroundColor: AppColors.error,
+              action: SnackBarAction(
+                label: 'SETTINGS',
+                textColor: Colors.white,
+                onPressed: PermissionService.openSettings,
               ),
-            );
-          }
+            ),
+          );
+        }
+        return;
+      }
+
+      // Validate file exists
+      final file = File(audioPath);
+      if (await file.exists()) {
+        onAudioChanged(audioPath);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Audio file not found'),
+              backgroundColor: AppColors.error,
+            ),
+          );
         }
       }
     } catch (e) {

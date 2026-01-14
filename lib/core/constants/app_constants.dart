@@ -45,6 +45,31 @@ class AppConstants {
     'ogg',
   ];
 
+  // ========== PERFORMANCE FLAGS ==========
+
+  /// Zero-copy preview mode (ENABLED)
+  ///
+  /// Clips are NOT exported during split.
+  /// Instead, only timestamps are stored, allowing instant
+  /// scrubbing and preview. Actual export happens only when
+  /// user taps "EXPORT".
+  ///
+  /// Benefits:
+  /// - Instant split/preview (no codec copy overhead)
+  /// - Lower storage usage (no intermediate files)
+  /// - Faster workflow for preview-heavy users
+  ///
+  /// **ENABLED** for maximum performance
+  static const bool USE_ZERO_COPY_PREVIEW = true;
+
+  /// Fallback to re-encoding (for debugging/compatibility)
+  ///
+  /// If set to true, uses slower re-encoding export mode
+  /// instead of ultra-fast codec copy.
+  ///
+  /// Default: false (use codec copy for speed)
+  static const bool FALLBACK_TO_REENCODE = false;
+
   // UI animation durations
   static const Duration animationFast = Duration(milliseconds: 150);
   static const Duration animationNormal = Duration(milliseconds: 300);

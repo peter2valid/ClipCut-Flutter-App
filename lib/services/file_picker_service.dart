@@ -1,12 +1,22 @@
 import 'package:file_picker/file_picker.dart';
 import '../core/constants/app_constants.dart';
 import '../core/utils/file_utils.dart';
+import 'permission_service.dart';
 
 /// Service for picking videos and audio files from device storage
 class FilePickerService {
   /// Pick a video file from device storage
   static Future<String?> pickVideo() async {
     try {
+      // Check permissions first
+      final hasPermission = await PermissionService.hasMediaPermission();
+      if (!hasPermission) {
+        final granted = await PermissionService.requestMediaPermissions();
+        if (!granted) {
+          return null; // Permission denied
+        }
+      }
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.video,
         allowMultiple: false,
@@ -31,6 +41,15 @@ class FilePickerService {
   /// Pick an audio file from device storage
   static Future<String?> pickAudio() async {
     try {
+      // Check permissions first
+      final hasPermission = await PermissionService.hasMediaPermission();
+      if (!hasPermission) {
+        final granted = await PermissionService.requestMediaPermissions();
+        if (!granted) {
+          return null; // Permission denied
+        }
+      }
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: AppConstants.supportedAudioFormats,
@@ -53,6 +72,15 @@ class FilePickerService {
   /// Pick multiple video files
   static Future<List<String>> pickMultipleVideos() async {
     try {
+      // Check permissions first
+      final hasPermission = await PermissionService.hasMediaPermission();
+      if (!hasPermission) {
+        final granted = await PermissionService.requestMediaPermissions();
+        if (!granted) {
+          return []; // Permission denied
+        }
+      }
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.video,
         allowMultiple: true,

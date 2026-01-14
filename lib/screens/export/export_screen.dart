@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_filex/open_filex.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/app_typography.dart';
@@ -9,7 +10,6 @@ import '../../providers/providers.dart';
 import '../../services/services.dart';
 import '../../widgets/widgets.dart';
 import 'widgets/resolution_picker.dart';
-import 'widgets/export_progress.dart';
 
 /// Export screen for exporting clips to device storage
 class ExportScreen extends ConsumerStatefulWidget {
@@ -89,22 +89,21 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       return;
     }
 
-    // Check permissions
-    final hasPermission = await PermissionService.hasStoragePermission();
+    // Request storage permission for export
+    final hasPermission = await PermissionService.hasMediaPermission();
     if (!hasPermission) {
-      final granted = await PermissionService.requestStoragePermission();
-      if (!granted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Storage permission required to save videos'),
-              action: SnackBarAction(
-                label: 'SETTINGS',
-                onPressed: PermissionService.openSettings,
-              ),
+      final granted = await PermissionService.requestMediaPermissions();
+      if (!granted && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                const Text('Storage permission is required to export clips'),
+            action: SnackBarAction(
+              label: 'SETTINGS',
+              onPressed: PermissionService.openSettings,
             ),
-          );
-        }
+          ),
+        );
         return;
       }
     }
@@ -180,18 +179,40 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   void _openExportFolder() async {
     try {
       final exportDir = await FFmpegService.getExportDirectory();
-      // Note: Opening folders requires platform-specific code
-      // For now, just show the path
+
+      // Try to open the folder
+      final result = await OpenFilex.open(exportDir);
+
+      if (mounted) {
+        if (result.type == ResultType.done) {
+          // Success - no need to show message
+        } else if (result.type == ResultType.fileNotFound) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Folder not found: $exportDir'),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+        } else {
+          // Show path as fallback if opening failed
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Saved to: $exportDir'),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Could not open export folder: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Saved to: $exportDir'),
-            duration: const Duration(seconds: 4),
+          const SnackBar(
+            content: Text('Could not open folder'),
+            backgroundColor: AppColors.error,
           ),
         );
       }
-    } catch (e) {
-      debugPrint('Could not get export folder: $e');
     }
   }
 
@@ -423,13 +444,69 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppConstants.paddingL),
-        child: ExportProgress(
-          currentClip: exportState.currentClipIndex,
-          totalClips: exportState.totalClips,
-          clipProgress: exportState.currentClipProgress,
-          overallProgress: exportState.overallProgress,
-          currentClipName: 'Clip ${exportState.currentClipIndex}',
-          onCancel: _cancelExport,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Export icon
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: const Icon(
+                Icons.save_alt_rounded,
+                size: 40,
+                color: AppColors.accent,
+              ),
+            ),
+
+            const SizedBox(height: AppConstants.paddingXL),
+
+            // Progress text
+            Text(
+              exportState.progressText,
+              style: AppTypography.headlineSmall,
+            ),
+
+            const SizedBox(height: AppConstants.paddingM),
+
+            // Overall progress bar
+            SizedBox(
+              width: 280,
+              child: Column(
+                children: [
+                  LinearProgressIndicator(
+                    value: exportState.overallProgress,
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.accent,
+                    ),
+                  ),
+                  const SizedBox(height: AppConstants.paddingS),
+                  Text(
+                    '${exportState.progressPercent}%',
+                    style: AppTypography.labelMedium.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: AppConstants.paddingXL),
+
+            // Cancel button
+            TextButton.icon(
+              onPressed: _cancelExport,
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('CANCEL'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textSecondary,
+              ),
+            ),
+          ],
         ),
       ),
     );
